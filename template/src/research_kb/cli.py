@@ -13,7 +13,7 @@ import click
 
 from .config import get_settings
 from .db import connect, get_meta, init_db
-from .eval import load_gold_queries, run_eval
+from .eval import ABModelSpec, load_gold_queries, run_ab_eval, run_eval
 from .index import index_corpus
 from .service import (
     follow_citations_service,
@@ -144,9 +144,22 @@ def status(as_json: bool) -> None:
 @click.option("--gold", type=click.Path(exists=True), default="work/eval/gold_queries.yaml")
 @click.option("-k", "k", default=10)
 @click.option("--json", "as_json", is_flag=True)
-def eval(gold: str, k: int, as_json: bool) -> None:
-    """Load the gold set and report recall@k / MRR / faithfulness."""
+@click.option("--ab", nargs=2, default=None, metavar="MODEL_A MODEL_B",
+              help="A/B two embedding models on this gold set; each is rebuilt into its own index.")
+@click.option("--ab-backend", default=None, help="Embed backend for A/B arms (default: current KB_EMBED_BACKEND).")
+@click.option("--dim-a", type=int, default=None, help="Vector dim for MODEL_A (default: catalog, else KB_EMBED_DIM).")
+@click.option("--dim-b", type=int, default=None, help="Vector dim for MODEL_B (default: catalog, else KB_EMBED_DIM).")
+def eval(gold, k, as_json, ab, ab_backend, dim_a, dim_b) -> None:
+    """Load the gold set and report recall@k / MRR / faithfulness.
+
+    With ``--ab MODEL_A MODEL_B`` the two embedding models are each rebuilt into an isolated index and
+    scored on the same gold queries, printed side by side — the primary index is left untouched.
+    """
     s = get_settings()
+    if ab:
+        _run_ab_eval_cli(s, Path(gold), k, ab, ab_backend, dim_a, dim_b, as_json)
+        return
+
     con = _con()
     n = load_gold_queries(con, Path(gold), s)
     report = run_eval(con, k=k, settings=s)
@@ -162,6 +175,54 @@ def eval(gold: str, k: int, as_json: bool) -> None:
         click.echo(f"misses ({len(misses)}):")
         for q in misses:
             click.echo(f"  - {q.query[:72]}")
+
+
+def _run_ab_eval_cli(s, gold: Path, k: int, ab, ab_backend, dim_a, dim_b, as_json: bool) -> None:
+    from .advisor import dim_for_model
+
+    backend = ab_backend or s.embed_backend
+    model_a, model_b = ab
+    spec_a = ABModelSpec(model=model_a, dim=dim_a or dim_for_model(model_a) or s.embed_dim, backend=backend, label="A")
+    spec_b = ABModelSpec(model=model_b, dim=dim_b or dim_for_model(model_b) or s.embed_dim, backend=backend, label="B")
+    report = run_ab_eval(s, gold, spec_a, spec_b, k=k)
+
+    if as_json:
+        click.echo(_json.dumps(report.as_dict(), indent=2))
+        return
+    ra, rb = report.report_a, report.report_b
+    click.echo(f"A/B over {ra.n_queries} gold queries (backend={backend}), k={k}:")
+    click.echo(f"  {'metric':16} {'A: ' + spec_a.model[:26]:30} {'B: ' + spec_b.model[:26]:30}")
+    click.echo(f"  {'recall@' + str(k):16} {ra.recall_at_k:<30.3f} {rb.recall_at_k:<30.3f}")
+    click.echo(f"  {'MRR':16} {ra.mrr:<30.3f} {rb.mrr:<30.3f}")
+    click.echo(f"  {'faithfulness':16} {ra.faithfulness_ratio:<30.4f} {rb.faithfulness_ratio:<30.4f}")
+    winner = spec_a.model if ra.recall_at_k >= rb.recall_at_k else spec_b.model
+    click.echo(f"  -> higher recall@{k}: {winner} (eval decides; the advisor only proposes)")
+
+
+@main.command()
+@click.option("--source", type=click.Choice(["auto", "db", "reference"]), default="auto",
+              help="Where to read the corpus sample: the index, the reference/ files, or auto.")
+@click.option("--json", "as_json", is_flag=True)
+def advise(source: str, as_json: bool) -> None:
+    """Recommend a KB_EMBED_MODEL from corpus language + density (offline heuristics; eval decides)."""
+    from .advisor import advise as advise_corpus
+
+    s = get_settings()
+    con = connect(s.db_path) if s.db_path.exists() else None
+    rec = advise_corpus(s, con, prefer=source)
+    if as_json:
+        click.echo(_json.dumps(rec.as_dict(), indent=2))
+        return
+    sig = rec.signals
+    click.echo(f"recommended KB_EMBED_MODEL: {rec.model} (dim {rec.dim})")
+    click.echo(f"  rationale: {rec.rationale}")
+    click.echo(f"  current:   {s.embed_model} (dim {s.embed_dim})")
+    click.echo(f"  signals ({sig.source}, {sig.n_docs} docs, {sig.n_tokens} tokens):")
+    click.echo(f"    non-Latin script ratio : {sig.non_latin_ratio:.3f}")
+    click.echo(f"    English-stopword ratio : {sig.english_stopword_ratio:.3f}")
+    click.echo(f"    academic-density score : {sig.academic_score:.3f}")
+    click.echo("  note: a recommendation, not a verdict — confirm with `research-kb eval --ab <current> "
+               f"{rec.model}`.")
 
 
 @main.command()

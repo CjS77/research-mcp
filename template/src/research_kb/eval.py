@@ -9,12 +9,14 @@ recall targets are unmeasurable.
 from __future__ import annotations
 
 import sqlite3
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
 from .config import Settings, get_settings
+from .db import connect
 from .embed import get_query_embedder
 from .embed.base import EmbeddingProvider
 from .extract.base import span_hash
@@ -125,3 +127,101 @@ def run_eval(
         faithfulness_checked=checked, faithfulness_matched=matched,
         per_query=per_query,
     )
+
+
+# --- A/B: compare two embedding models on the same gold set --------------------------------------
+# Switching the embedding model is a rebuild, not a migration (the DB self-describes its vector
+# space via kb_meta). So A/B indexes each model into its *own* fresh DB, then runs the same gold
+# queries against each — the primary index is never mutated.
+
+
+@dataclass
+class ABModelSpec:
+    """One arm of an A/B run: the embedding backend/model/dimension to build and score."""
+
+    model: str
+    dim: int
+    backend: str = "fastembed"
+    label: str = ""
+
+    def display(self) -> str:
+        return self.label or self.model
+
+
+@dataclass
+class ABReport:
+    """Two eval reports over one gold set, one per embedding model."""
+
+    k: int
+    spec_a: ABModelSpec
+    report_a: EvalReport
+    spec_b: ABModelSpec
+    report_b: EvalReport
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "k": self.k,
+            "a": {"model": self.spec_a.model, "dim": self.spec_a.dim, "backend": self.spec_a.backend,
+                  **self.report_a.as_dict()},
+            "b": {"model": self.spec_b.model, "dim": self.spec_b.dim, "backend": self.spec_b.backend,
+                  **self.report_b.as_dict()},
+        }
+
+
+def _safe_label(text: str) -> str:
+    return "".join(c if c.isalnum() else "-" for c in text).strip("-") or "model"
+
+
+def _eval_one_model(
+    settings: Settings,
+    gold_path: Path,
+    spec: ABModelSpec,
+    k: int,
+    workdir: Path,
+) -> EvalReport:
+    """Rebuild the corpus under one embedding model into an isolated DB, then run the gold set."""
+    from .index import index_corpus  # local import: index -> embed pulls heavy deps only when A/B runs
+
+    arm_dir = workdir / _safe_label(spec.display())
+    arm_dir.mkdir(parents=True, exist_ok=True)
+    arm_settings = settings.model_copy(
+        update={
+            "embed_backend": spec.backend,
+            "embed_model": spec.model,
+            "embed_dim": spec.dim,
+            "db_path": arm_dir / "kb.sqlite",
+            "distilled_dir": arm_dir / "distilled",
+        }
+    )
+    index_corpus(arm_settings)
+    con = connect(arm_settings.db_path)
+    try:
+        load_gold_queries(con, gold_path, arm_settings)
+        return run_eval(con, k=k, settings=arm_settings)
+    finally:
+        con.close()
+
+
+def run_ab_eval(
+    settings: Settings,
+    gold_path: Path,
+    spec_a: ABModelSpec,
+    spec_b: ABModelSpec,
+    k: int = 10,
+    workdir: Path | None = None,
+) -> ABReport:
+    """Build and score two embedding models on the same gold queries, side by side.
+
+    Each model is indexed into its own throwaway DB (a rebuild), so neither the primary index nor the
+    other arm is touched. Model choice stays eval-gated: this returns the numbers; the caller decides.
+    """
+    if workdir is not None:
+        workdir.mkdir(parents=True, exist_ok=True)
+        report_a = _eval_one_model(settings, gold_path, spec_a, k, workdir)
+        report_b = _eval_one_model(settings, gold_path, spec_b, k, workdir)
+    else:
+        with tempfile.TemporaryDirectory(prefix="kb-ab-eval-") as tmp:
+            root = Path(tmp)
+            report_a = _eval_one_model(settings, gold_path, spec_a, k, root)
+            report_b = _eval_one_model(settings, gold_path, spec_b, k, root)
+    return ABReport(k=k, spec_a=spec_a, report_a=report_a, spec_b=spec_b, report_b=report_b)
