@@ -1,10 +1,10 @@
 name: CI
 
 # Runs the engine's quality gates. Activates once this plugin is hosted on GitHub; harmless before.
+# PRs only — on open and on every new push to the PR branch; no runs on plain branch pushes.
 on:
-  push:
-    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened]
 
 jobs:
   engine:
