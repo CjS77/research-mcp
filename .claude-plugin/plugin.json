@@ -2,7 +2,11 @@
   "name": "research-mcp",
   "version": "0.1.0",
   "description": "Bootstrap a fidelity-first research knowledge base (RAG) on any topic and serve it to agents over MCP.",
-  "author": "CjS77",
+  "author": {
+    "name": "CjS77",
+    "url": "https://github.com/CjS77"
+  },
+  "license": "BSD-3-Clause",
   "keywords": [
     "rag",
     "knowledge-base",

@@ -74,3 +74,9 @@ The agent then follows the playbook in [`AGENTS.md`](AGENTS.md) end to end:
 - `claude` on `PATH` for the optional distillation pass (headless `claude -p` under a Claude
   subscription — see the "distill backend" section of [`template/README.md`](template/README.md)).
   The KB is fully queryable without it.
+
+## License
+
+BSD 3-Clause — see [`LICENSE`](LICENSE). Copyright (c) 2026 CjS77. Redistributions (including cloned
+KB instances) must retain the copyright notice, and the author's name may not be used to endorse
+derivative works without permission.
