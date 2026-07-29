@@ -18,6 +18,7 @@ dependencies = [
     # In-process neural embeddings via ONNX runtime (no torch, no server). Core, not an extra:
     # the shipped DB records embed_backend=fastembed, so serving queries requires it.
     "fastembed>=0.4",
+    "trafilatura>=1.8",
 ]
 
 [project.optional-dependencies]

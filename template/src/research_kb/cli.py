@@ -323,6 +323,31 @@ def acquire(manifest: str, dest: str) -> None:
 
 
 @main.command()
+@click.argument("url")
+@click.option("--dest", type=click.Path(), default="reference", help="Where the Markdown file lands.")
+@click.option("--name", "stem", default=None, help="Output filename stem (default: derived from the page title/URL).")
+@click.option("--force", is_flag=True, help="Overwrite an existing file with the same name.")
+def fetch(url: str, dest: str, stem: str | None, force: bool) -> None:
+    """Fetch a web page/standard, convert it to Markdown, and drop it in reference/ as corpus material.
+
+    The page is fetched with the same believable-browser fingerprint as `acquire`, its main content
+    is extracted (nav/boilerplate stripped), and it is content-verified — a challenge/error/empty
+    page is rejected, not written. The result is an ordinary `.md`; run `index --scan reference` to
+    ingest it like any local Markdown.
+    """
+    from .fetch import fetch_page
+
+    outcome = fetch_page(url, Path(dest), stem=stem, force=force)
+    if outcome.status == "OK":
+        click.echo(f"  OK   {outcome.path} ({outcome.detail})")
+        click.echo("indexed nothing yet — run `research-kb index --scan reference` to ingest it")
+    elif outcome.status == "SKIP":
+        click.echo(f"  SKIP {outcome.path}: {outcome.detail}")
+    else:
+        raise click.ClickException(f"rejected: {outcome.detail}")
+
+
+@main.command()
 @click.argument("query")
 @click.option("--provider", "-p", "providers", multiple=True,
               help="Provider(s) to query; repeatable. Default: all registered.")
