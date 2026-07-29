@@ -35,15 +35,16 @@ def kb_search(
     doc_type: str | None = None,
     tier: str | None = None,
     phase: int | None = None,
-    facet_a: str | None = None,
-    facet_b: str | None = None,
+    facets: dict[str, str] | None = None,
 ) -> list[dict]:
     """Hybrid semantic + keyword search over the corpus.
 
     Supports multi-term queries split on ``|`` (e.g. ``"index structure | cache eviction | latency"``).
     Returns ranked hits with provenance: {chunk_id, paper, section, page, content_kind, score}.
     Filter by doc_type ('paper'|'research'|'assessment'|'sketch'|'spec'), tier ('core'|'breadth'),
-    phase (1/2/3), facet_a, or facet_b.
+    phase (1/2/3), and any declared named facet via ``facets`` — a mapping of facet name to the value
+    to match, e.g. ``{"clade": "theropod", "period": "jurassic"}``. The KB's facet axes are declared
+    in its profile and returned by ``kb_list_corpus`` (its ``facets`` field).
     """
     filters: dict[str, object] = {}
     if doc_type:
@@ -52,10 +53,8 @@ def kb_search(
         filters["tier"] = tier
     if phase is not None:
         filters["phase"] = phase
-    if facet_a:
-        filters["facet_a"] = [facet_a]
-    if facet_b:
-        filters["facet_b"] = [facet_b]
+    if facets:
+        filters["facets"] = {name: [value] for name, value in facets.items()}
     con = _con()
     try:
         return search_service(con, query, filters=filters or None, k=k)

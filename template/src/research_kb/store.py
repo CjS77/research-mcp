@@ -34,6 +34,23 @@ def _loads(raw: str | None) -> list[str]:
         return []
 
 
+def _dumps_facets(facets: dict[str, list[str]]) -> str:
+    return json.dumps(facets, ensure_ascii=False)
+
+
+def _loads_facets(raw: str | None) -> dict[str, list[str]]:
+    """Parse the documents.facets JSON object into {name: [values]}, tolerating legacy/garbled rows."""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {str(k): [str(x) for x in v] for k, v in parsed.items() if isinstance(v, list)}
+
+
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -49,8 +66,7 @@ def row_to_document(row: sqlite3.Row) -> Document:
         tier=row["tier"],
         title=row["title"],
         phase=row["phase"],
-        facet_b=_loads(row["facet_b"]),
-        facet_a=_loads(row["facet_a"]),
+        facets=_loads_facets(row["facets"]),
         authors=_loads(row["authors"]),
         year=row["year"],
         page_count=row["page_count"],
@@ -65,19 +81,19 @@ def upsert_document(con: sqlite3.Connection, doc: Document) -> int:
     cur = con.execute(
         """
         INSERT INTO documents
-            (source_path, doc_type, tier, title, phase, facet_b, facet_a, authors,
+            (source_path, doc_type, tier, title, phase, facets, authors,
              year, page_count, validated, content_hash, word_count, indexed_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(source_path) DO UPDATE SET
             doc_type=excluded.doc_type, tier=excluded.tier, title=excluded.title,
-            phase=excluded.phase, facet_b=excluded.facet_b, facet_a=excluded.facet_a,
+            phase=excluded.phase, facets=excluded.facets,
             authors=excluded.authors, year=excluded.year, page_count=excluded.page_count,
             validated=excluded.validated, content_hash=excluded.content_hash,
             word_count=excluded.word_count, indexed_at=excluded.indexed_at
         """,
         (
             doc.source_path, doc.doc_type, doc.tier, doc.title, doc.phase,
-            _dumps(doc.facet_b), _dumps(doc.facet_a), _dumps(doc.authors),
+            _dumps_facets(doc.facets), _dumps(doc.authors),
             doc.year, doc.page_count, int(doc.validated), doc.content_hash, doc.word_count, _now(),
         ),
     )

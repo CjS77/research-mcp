@@ -67,8 +67,7 @@ def _render_enriched(item: CorpusItem, extracted: ExtractedDoc, enr: EnrichmentR
         f"doc_type: {item.doc_type}",
         f"tier: {item.tier}",
         f"year: {enr.year if enr.year is not None else ''}",
-        f"facet_a: {enr.facet_a}",
-        f"facet_b: {enr.facet_b}",
+        f"facets: {enr.facets}",
         f"indexed_extractor: {extracted.extractor}",
         f"enrichment_source: {enr.source}",
         "content_kind: derived",
@@ -138,7 +137,7 @@ def index_item(
 
         doc = Document(
             source_path=item.source_path, doc_type=item.doc_type, tier=item.tier, title=item.title,
-            phase=item.phase, facet_b=enr.facet_b, facet_a=enr.facet_a, year=enr.year,
+            phase=item.phase, facets=enr.facets, year=enr.year,
             page_count=deterministic.page_count, validated=validated,
             content_hash=item.content_hash, word_count=indexed.word_count,
         )

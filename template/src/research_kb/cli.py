@@ -67,10 +67,10 @@ def index(scans: tuple[str, ...], force: bool, no_embed: bool) -> None:
 @click.option("--tier", type=click.Choice(["core", "breadth"]))
 @click.option("--doc-type", "doc_type")
 @click.option("--phase", type=int)
-@click.option("--facet-a", "facet_a", multiple=True)
-@click.option("--facet-b", "facet_b", multiple=True)
+@click.option("--facet", "facets", multiple=True, metavar="NAME=VALUE",
+              help="Filter by a named facet, e.g. --facet clade=theropod (repeatable; declared in the profile).")
 @click.option("--json", "as_json", is_flag=True)
-def search(query, k, tier, doc_type, phase, facet_a, facet_b, as_json) -> None:
+def search(query, k, tier, doc_type, phase, facets, as_json) -> None:
     """Hybrid semantic + keyword search."""
     filters: dict[str, object] = {}
     if tier:
@@ -79,10 +79,14 @@ def search(query, k, tier, doc_type, phase, facet_a, facet_b, as_json) -> None:
         filters["doc_type"] = doc_type
     if phase is not None:
         filters["phase"] = phase
-    if facet_a:
-        filters["facet_a"] = list(facet_a)
-    if facet_b:
-        filters["facet_b"] = list(facet_b)
+    facet_filter: dict[str, list[str]] = {}
+    for pair in facets:
+        if "=" not in pair:
+            raise click.BadParameter(f"--facet expects NAME=VALUE, got {pair!r}")
+        name, value = pair.split("=", 1)
+        facet_filter.setdefault(name.strip(), []).append(value.strip())
+    if facet_filter:
+        filters["facets"] = facet_filter
 
     con = _con()
     hits = search_service(con, query, filters=filters or None, k=k)
@@ -175,7 +179,8 @@ def paper(identifier: str, as_json: bool) -> None:
     click.echo(f"[{info['id']}] {info['title']}")
     click.echo(f"  {info['doc_type']}/{info['tier']}  year={info['year']}  pages={info['page_count']}  "
                f"validated={info['validated']}")
-    click.echo(f"  facet_a: {', '.join(info['facet_a']) or '-'}")
+    facet_str = "; ".join(f"{name}: {', '.join(vals)}" for name, vals in info["facets"].items()) or "-"
+    click.echo(f"  facets: {facet_str}")
     click.echo(f"  artifacts: {', '.join(info['artifacts'].keys()) or '-'}")
     click.echo(f"  sections ({len(info['section_outline'])}):")
     for s in info["section_outline"][:40]:
@@ -212,6 +217,8 @@ def corpus(tier: str, acquire: bool, as_json: bool) -> None:
     if as_json:
         click.echo(_json.dumps(result, indent=2))
         return
+    if result.get("facets"):
+        click.echo(f"facets: {', '.join(result['facets'])}")
     click.echo(f"{result['count']} documents:")
     for d in result["documents"]:
         click.echo(f"  [{d['id']:2}] {d['tier']:7} {d['doc_type']:11} {d['chunks']:4}ch  {d['title'][:52]}")
