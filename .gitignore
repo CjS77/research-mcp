@@ -17,3 +17,5 @@ __pycache__/
 .vscode/
 
 # The template/ engine has its own .gitignore for per-instance work/ and index artifacts.
+.kanban/
+
