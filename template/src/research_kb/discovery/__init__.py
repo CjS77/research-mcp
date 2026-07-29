@@ -21,7 +21,7 @@ from ..config import Settings, get_settings
 
 # Side-effect imports: each provider module calls register(...) at import time, so importing the
 # package populates the registry. Kept first so provider_names() is ready for anything below.
-from . import arxiv, crossref, eprint, semantic_scholar  # noqa: F401  (registration side effects)
+from . import arxiv, crossref, eprint, europe_pmc, semantic_scholar  # noqa: F401  (registration side effects)
 from .base import (
     Candidate,
     Provider,

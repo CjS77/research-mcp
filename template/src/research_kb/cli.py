@@ -362,7 +362,7 @@ def fetch(url: str, dest: str, stem: str | None, force: bool) -> None:
 def discover(query, providers, since, limit, manifest, do_refresh, dry_run, as_json) -> None:
     """Find candidate documents from provider APIs and merge them into an acquire manifest.
 
-    Queries each provider (arXiv/Crossref/Semantic Scholar/IACR ePrint) and writes {filename, title, url} entries
+    Queries each provider (arXiv/Crossref/Semantic Scholar/IACR ePrint/Europe PMC) and writes {filename, title, url} entries
     that `acquire` then downloads and content-verifies — discovery never bypasses verification. With
     --refresh, only material newer than each provider's last run is fetched (the cron path).
     """

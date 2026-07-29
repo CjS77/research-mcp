@@ -14,7 +14,7 @@ import yaml
 
 from research_kb import discovery
 from research_kb.config import Settings
-from research_kb.discovery import arxiv, base, crossref, eprint, http, semantic_scholar
+from research_kb.discovery import arxiv, base, crossref, eprint, europe_pmc, http, semantic_scholar
 from research_kb.discovery.base import Candidate, Provider
 
 # --- Fake HTTP -------------------------------------------------------------------------------------
@@ -143,11 +143,65 @@ _EPRINT_HTML = """<!doctype html><html><body>
 </body></html>"""
 
 
+_EUROPE_PMC_JSON = {
+    "hitCount": 3,
+    "resultList": {
+        "result": [
+            {
+                "id": "34567890",
+                "source": "MED",
+                "pmid": "34567890",
+                "pmcid": "PMC7654321",
+                "doi": "10.1/crispr",
+                "title": "CRISPR Base Editing  In Vivo",
+                "pubYear": "2021",
+                "isOpenAccess": "Y",
+                "fullTextUrlList": {
+                    "fullTextUrl": [
+                        {"availability": "Open access", "availabilityCode": "OA", "documentStyle": "html",
+                         "url": "https://europepmc.org/article/MED/34567890"},
+                        {"availability": "Open access", "availabilityCode": "OA", "documentStyle": "pdf",
+                         "url": "https://europepmc.org/articles/PMC7654321?pdf=render"},
+                    ]
+                },
+            },
+            {
+                "id": "22222222",
+                "source": "MED",
+                "doi": "10.1/closed",
+                "title": "Subscription Only Trial",
+                "pubYear": "2022",
+                "isOpenAccess": "N",
+                "fullTextUrlList": {
+                    "fullTextUrl": [
+                        {"availability": "Subscription required", "availabilityCode": "S", "documentStyle": "pdf",
+                         "url": "https://publisher.example/closed.pdf"},
+                    ]
+                },
+            },
+            {
+                "id": "33333333",
+                "source": "MED",
+                "doi": "10.1/htmlonly",
+                "title": "Only HTML Full Text",
+                "pubYear": "2020",
+                "fullTextUrlList": {
+                    "fullTextUrl": [
+                        {"availability": "Open access", "availabilityCode": "OA", "documentStyle": "html",
+                         "url": "https://europepmc.org/article/MED/33333333"},
+                    ]
+                },
+            },
+        ]
+    },
+}
+
+
 # --- Registry --------------------------------------------------------------------------------------
 
 
 def test_shipped_providers_registered():
-    assert {"arxiv", "crossref", "semantic_scholar", "eprint"} <= set(discovery.provider_names())
+    assert {"arxiv", "crossref", "semantic_scholar", "eprint", "europe_pmc"} <= set(discovery.provider_names())
     assert discovery.get_provider("nonesuch") is None
     assert discovery.get_provider("arxiv") is not None
 
@@ -259,6 +313,39 @@ def test_eprint_date_filter_passes_year():
     _, params, _ = client.calls[0]
     # ePrint's submittedafter takes a year (not a date), so since collapses to its year
     assert params["submittedafter"] == 2024
+
+
+# --- Europe PMC ------------------------------------------------------------------------------------
+
+
+def test_europe_pmc_gates_on_open_access_pdf():
+    client = _FakeClient(_FakeResponse(json_data=_EUROPE_PMC_JSON))
+    cands = europe_pmc.search("crispr", client=client)
+    # closed-access PDF (availabilityCode S) and html-only result are both dropped
+    assert [c.id for c in cands] == ["10.1/crispr"]
+    c = cands[0]
+    assert c.title == "CRISPR Base Editing In Vivo"  # whitespace collapsed
+    assert c.url == "https://europepmc.org/articles/PMC7654321?pdf=render"  # the OA pdf rendition wins over html
+    assert c.year == 2021
+    assert c.doi == "10.1/crispr"
+    assert c.manifest_entry() == {
+        "filename": "europe_pmc-10.1_crispr.pdf",
+        "title": "CRISPR Base Editing In Vivo",
+        "url": "https://europepmc.org/articles/PMC7654321?pdf=render",
+    }
+    # request shape: JSON core results (lite omits the full-text links), no date filter when since is None
+    _, params, _ = client.calls[0]
+    assert params["format"] == "json"
+    assert params["resultType"] == "core"
+    assert params["query"] == "crispr"
+    assert "PUB_YEAR" not in params["query"]
+
+
+def test_europe_pmc_date_filter_passthrough():
+    client = _FakeClient(_FakeResponse(json_data=_EUROPE_PMC_JSON))
+    europe_pmc.search("crispr", since=date(2020, 1, 1), client=client)
+    _, params, _ = client.calls[0]
+    assert "PUB_YEAR:[2020 TO" in params["query"]
 
 
 # --- Shared HTTP helper ----------------------------------------------------------------------------
