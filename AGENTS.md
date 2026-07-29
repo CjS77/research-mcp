@@ -317,19 +317,21 @@ making each instance better:
 4. **Embedding-model advisor.** Suggest the embedding model from corpus language and density, and let
    `eval` A/B two models before committing (the DB is self-describing, so it's a rebuild, not a
    migration).
-5. **Backup & artifact preservation — critical.** *Engine + CLI shipped* (see the template's
-   [Backup & restore](template/README.md#backup--restore)); the interactive **backup-setup wizard**
-   is the remaining piece. Two irreplaceable assets: the token-expensive **distillation artifacts**
+5. **Backup & artifact preservation — critical.** *Shipped — engine, CLI, and the interactive
+   backup-setup wizard* (see the template's [Backup & restore](template/README.md#backup--restore)).
+   Two irreplaceable assets: the token-expensive **distillation artifacts**
    (`work/distilled/<stem>/{verbatim,llm,enriched,divergence-report}.md` — hours of LLM transcription
    you must never re-pay for) and the **index** (`work/data/kb.sqlite`, rebuildable but slow). What
    landed: a `BackupTarget` registry (`research_kb/backup/`) with **`rclone`** (one adapter, every
    cloud provider) and **`local`** targets, per-asset target *lists* (cloud + local), client-side
    **encryption on by default** via rclone `crypt` (passphrase from the OS keychain →
    `KB_BACKUP_PASSPHRASE` → prompt, never in-repo), a hash-verified `work/backup-manifest.json`, the
-   `backup push|restore|status` commands, and `research-kb rebuild` (reconstruct the index from
-   `reference/` + committed artifacts — the index's safety net, so it defaults to "don't backup").
-   IPFS was dropped (rclone covers the need). Losing distillation output is the expensive failure —
-   protect it first.
+   `backup push|restore|status` commands, `research-kb rebuild` (reconstruct the index from
+   `reference/` + committed artifacts — the index's safety net, so it defaults to "don't backup"), and
+   the **`research-kb backup init`** wizard (detect rclone/keychain → choose targets per asset →
+   generate + keychain-cache the crypt passphrase, shown once → prove a round-trip → persist
+   `KB_BACKUP_*` to `work/backup.env` for headless runs). IPFS was dropped (rclone covers the need).
+   Losing distillation output is the expensive failure — protect it first.
 
 **Deferred (keep on the roadmap, don't build now):**
 

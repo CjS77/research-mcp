@@ -176,7 +176,16 @@ Backup is **explicit** — it runs only on `research-kb backup push` (or the ref
 `index`/`distill`, so serving stays offline. With nothing configured, `push`/`restore` are a clear
 no-op pointing at the setup wizard; the KB ships fully queryable without any backup.
 
+**First-time setup is `research-kb backup init`** — an interactive wizard that detects rclone and the
+OS keychain, lets you pick each asset's targets (cloud / local / don't-backup; artifacts default to a
+cloud provider, the index to "don't backup"), generates the crypt passphrase and **shows it once** to
+save (caching it in the keychain), proves each target with a real push → pull → verify round-trip
+(refusing to save a target that fails), and writes `KB_BACKUP_*` to `work/backup.env` so later
+`push` / the refresh cron run **headless** — no rerun. Cloud auth stays with you (`rclone config`); the
+wizard never handles provider secrets.
+
 ```bash
+research-kb backup init                                  # one-time interactive setup (targets, key, round-trip)
 research-kb backup push [--asset artifacts|index|all]   # encrypt + upload; each upload is verified
 research-kb backup restore [--asset …] [--target …]     # download + decrypt + verify into place
 research-kb backup status                                # targets, last-push time, drift
