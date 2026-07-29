@@ -3,8 +3,9 @@
 This repo serves a `<KB-NAME>` knowledge base over MCP. When researching topics this KB covers,
 query it instead of grepping `reference/` or reading source files directly.
 
-> Replace `<KB-NAME>` and the description above with this instance's name and scope, and note the two
-> facet axes (`facet_a`, `facet_b`) this corpus filters on.
+> Replace `<KB-NAME>` and the description above with this instance's name and scope, and note the
+> named facet axes this corpus filters on (declared in the profile; `kb_list_corpus` returns their
+> names in its `facets` field).
 
 ## Invoking
 
@@ -20,8 +21,10 @@ kb_search(query="<query>", k=10)
 - Phrase queries as concepts, but keep exact technical tokens verbatim. The keyword half of the
   search leans on those tokens, so spelling them exactly matters.
 - Narrow the corpus with the optional parameters: `tier` (`core`|`breadth`), `doc_type`
-  (`paper`|`research`|`assessment`|`sketch`|`spec`), `facet_a`, `facet_b`, `phase` (`1`|`2`|`3`).
-  e.g. `tier="core"` restricts to the handful of validated core sources.
+  (`paper`|`research`|`assessment`|`sketch`|`spec`), `phase` (`1`|`2`|`3`), and `facets` — a mapping
+  of facet name to the value to match, e.g. `facets={"clade": "theropod", "period": "jurassic"}`. The
+  declared facet axes are listed by `kb_list_corpus` (its `facets` field). e.g. `tier="core"`
+  restricts to the handful of validated core sources.
 
 Follow-on tools (a search hit hands you the `chunk_id` / `document_id` these need):
 
