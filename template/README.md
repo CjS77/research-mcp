@@ -60,6 +60,20 @@ provider's last run and advances the marker (persisted in `work/discovery-state.
 uv run research-kb discover "your topic terms" --refresh   # only the delta since last run
 ```
 
+## Ingesting a web page
+
+A remote page, standard, or blog post can be pulled straight into the corpus as Markdown — no PDF
+required. `fetch` downloads the URL with the *same* believable-browser fingerprint as `acquire`,
+extracts the **main content** (nav/boilerplate stripped, via trafilatura), content-verifies it (a
+challenge/CAPTCHA/error/empty page is rejected, not written — there is no `%PDF` magic to lean on, so
+verification requires a real title plus a non-trivial body), and writes an ordinary `.md` into
+`reference/`. It is then indexed like any local Markdown, with no special-casing downstream.
+
+```bash
+uv run research-kb fetch https://example.org/some-standard   # → reference/<title-slug>.md
+uv run research-kb index --scan reference                    # ingest it like any .md
+```
+
 ## MCP tools
 
 Run the server with `uv run research-kb-mcp` (the checked-in `.mcp.json` registers it for Claude
