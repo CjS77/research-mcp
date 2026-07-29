@@ -322,6 +322,54 @@ def acquire(manifest: str, dest: str) -> None:
     click.echo(f"acquired={len(result.acquired)} skipped={len(result.skipped)} rejected={len(result.rejected)}")
 
 
+@main.command()
+@click.argument("query")
+@click.option("--provider", "-p", "providers", multiple=True,
+              help="Provider(s) to query; repeatable. Default: all registered.")
+@click.option("--since", type=str, default=None, help="Lower bound on submission date, YYYY-MM-DD.")
+@click.option("--limit", type=int, default=50, help="Max candidates per provider.")
+@click.option("--manifest", type=click.Path(), default="work/acquire-manifest.yaml",
+              help="Manifest to merge candidates into (acquire reads this).")
+@click.option("--refresh", "do_refresh", is_flag=True,
+              help="Incremental: use each provider's persisted last-run as --since and advance it.")
+@click.option("--dry-run", is_flag=True, help="Print candidates without writing the manifest.")
+@click.option("--json", "as_json", is_flag=True)
+def discover(query, providers, since, limit, manifest, do_refresh, dry_run, as_json) -> None:
+    """Find candidate documents from provider APIs and merge them into an acquire manifest.
+
+    Queries each provider (arXiv/Crossref/Semantic Scholar) and writes {filename, title, url} entries
+    that `acquire` then downloads and content-verifies — discovery never bypasses verification. With
+    --refresh, only material newer than each provider's last run is fetched (the cron path).
+    """
+    from datetime import date
+
+    from . import discovery
+
+    names = list(providers) or discovery.provider_names()
+    if do_refresh and since:
+        raise click.ClickException("--since and --refresh are mutually exclusive (refresh derives its own since)")
+
+    if do_refresh:
+        candidates = discovery.refresh(query, names, get_settings(), limit=limit)
+    else:
+        since_date = date.fromisoformat(since) if since else None
+        candidates = discovery.discover(query, names, since=since_date, limit=limit)
+
+    if as_json:
+        click.echo(_json.dumps([c.manifest_entry() for c in candidates], indent=2))
+    else:
+        counts: dict[str, int] = {}
+        for c in candidates:
+            counts[c.provider] = counts.get(c.provider, 0) + 1
+            click.echo(f"  {c.provider:16} {c.title[:70]}")
+        click.echo("found " + ", ".join(f"{n}={counts.get(n, 0)}" for n in names) + f" (total {len(candidates)})")
+
+    if dry_run:
+        return
+    added, total = discovery.write_manifest(candidates, Path(manifest))
+    click.echo(f"manifest {manifest}: +{added} new (total {total})")
+
+
 def _resolve_pdf(target: str, settings) -> Path | None:
     """Map a distill target (a PDF path or a bare stem) to an existing PDF under reference/."""
     p = Path(target)
