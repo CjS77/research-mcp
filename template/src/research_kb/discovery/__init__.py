@@ -1,7 +1,7 @@
 """Shared source-discovery library: providers → verified-acquisition manifest.
 
 Turns a topic query into candidate ``{title, id, url}`` triples via a registry of provider API
-clients (arXiv, Crossref, Semantic Scholar today; more register the same way), then emits a manifest
+clients (arXiv, Crossref, Semantic Scholar, IACR ePrint today; more register the same way), then emits a manifest
 :mod:`research_kb.acquire` downloads and *verifies*. Discovery finds candidates; acquire owns the
 non-negotiable verification (200 + ``%PDF`` + ≥60% title overlap). The same code path serves both
 first-seed discovery (:func:`discover`) and the incremental-refresh cron (:func:`refresh`), so an
@@ -21,7 +21,7 @@ from ..config import Settings, get_settings
 
 # Side-effect imports: each provider module calls register(...) at import time, so importing the
 # package populates the registry. Kept first so provider_names() is ready for anything below.
-from . import arxiv, crossref, semantic_scholar  # noqa: F401  (registration side effects)
+from . import arxiv, crossref, eprint, semantic_scholar  # noqa: F401  (registration side effects)
 from .base import (
     Candidate,
     Provider,

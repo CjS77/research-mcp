@@ -14,7 +14,7 @@ import yaml
 
 from research_kb import discovery
 from research_kb.config import Settings
-from research_kb.discovery import arxiv, base, crossref, http, semantic_scholar
+from research_kb.discovery import arxiv, base, crossref, eprint, http, semantic_scholar
 from research_kb.discovery.base import Candidate, Provider
 
 # --- Fake HTTP -------------------------------------------------------------------------------------
@@ -114,12 +114,40 @@ _S2_JSON = {
     ]
 }
 
+# ePrint serves server-rendered HTML: each result is a `paperlink` anchor (id in its `title` attr)
+# followed by a <strong> title. The third result omits the title <strong> — it must be dropped.
+_EPRINT_HTML = """<!doctype html><html><body>
+  <h4>3 results sorted by ID</h4>
+  <div class="ms-lg-4 mt-3 results">
+    <div class="mb-4">
+      <div class="d-flex"><a title="2026/1494" class="paperlink" href="/2026/1494">2026/1494</a>
+        <span class="ms-2"><a href="/2026/1494.pdf">(PDF)</a></span>
+        <small class="ms-auto">Last updated: 2026-07-21</small>
+      </div>
+      <div class="ms-md-4">
+        <strong>On $k$-way split
+          multiplication algorithms</strong>
+        <div class="mt-1"><span class="fst-italic">M. Cihangir, O. Yayla</span></div>
+      </div>
+    </div>
+    <div class="mb-4">
+      <div class="d-flex"><a title="2019/002" class="paperlink" href="/2019/002">2019/002</a>
+        <span class="ms-2"><a href="/2019/002.pdf">(PDF)</a></span>
+      </div>
+      <div class="ms-md-4"><strong>Lattice Signatures &amp; Bimodal Gaussians</strong></div>
+    </div>
+    <div class="mb-4">
+      <div class="d-flex"><a title="2018/999" class="paperlink" href="/2018/999">2018/999</a></div>
+    </div>
+  </div>
+</body></html>"""
+
 
 # --- Registry --------------------------------------------------------------------------------------
 
 
 def test_shipped_providers_registered():
-    assert {"arxiv", "crossref", "semantic_scholar"} <= set(discovery.provider_names())
+    assert {"arxiv", "crossref", "semantic_scholar", "eprint"} <= set(discovery.provider_names())
     assert discovery.get_provider("nonesuch") is None
     assert discovery.get_provider("arxiv") is not None
 
@@ -192,6 +220,45 @@ def test_semantic_scholar_skips_closed_access():
     assert cands[1].id == "ghi789"  # no external id → falls back to the S2 paperId
     _, params, _ = client.calls[0]
     assert params["year"] == "2019-"
+
+
+# --- IACR ePrint -----------------------------------------------------------------------------------
+
+
+def test_eprint_parses_html_results_and_manifest():
+    client = _FakeClient(_FakeResponse(text=_EPRINT_HTML))
+    cands = eprint.search("lattice", client=client)
+    # the title-less third result is dropped; two valid ones remain, in page order
+    assert [c.id for c in cands] == ["2026/1494", "2019/002"]
+    first = cands[0]
+    assert first.title == "On $k$-way split multiplication algorithms"  # whitespace/newlines collapsed
+    assert first.url == "https://eprint.iacr.org/2026/1494.pdf"  # canonical PDF, built from the id
+    assert first.year == 2026  # derived from the id's year prefix
+    assert first.manifest_entry() == {
+        "filename": "eprint-2026_1494.pdf",  # the "/" is made filesystem-safe
+        "title": "On $k$-way split multiplication algorithms",
+        "url": "https://eprint.iacr.org/2026/1494.pdf",
+    }
+    assert cands[1].title == "Lattice Signatures & Bimodal Gaussians"  # &amp; entity decoded
+    assert cands[1].year == 2019
+    # request shape: the query goes through as q=, no year bound when since is None
+    _, params, _ = client.calls[0]
+    assert params["q"] == "lattice"
+    assert "submittedafter" not in params
+
+
+def test_eprint_limit_slices_results():
+    client = _FakeClient(_FakeResponse(text=_EPRINT_HTML))
+    cands = eprint.search("lattice", client=client, limit=1)
+    assert [c.id for c in cands] == ["2026/1494"]
+
+
+def test_eprint_date_filter_passes_year():
+    client = _FakeClient(_FakeResponse(text=_EPRINT_HTML))
+    eprint.search("lattice", since=date(2024, 3, 15), client=client)
+    _, params, _ = client.calls[0]
+    # ePrint's submittedafter takes a year (not a date), so since collapses to its year
+    assert params["submittedafter"] == 2024
 
 
 # --- Shared HTTP helper ----------------------------------------------------------------------------
