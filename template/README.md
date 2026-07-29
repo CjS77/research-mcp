@@ -39,6 +39,27 @@ Optionally distil PDFs to a committed LLM transcription first (improves math/lay
 uv run research-kb distill --all   # writes work/distilled/<stem>/llm.md
 ```
 
+## Discovering sources
+
+Turn a topic query into a **verified-acquisition manifest** without hand-guessing PDF URLs. The
+`discover` command queries provider APIs (arXiv, Crossref, Semantic Scholar today; the registry in
+`src/research_kb/discovery/` takes more) and merges `{filename, title, url}` entries into the
+manifest `acquire` reads. Discovery only *finds* candidates — `acquire` still downloads and verifies
+every one (HTTP 200 + `%PDF` magic + ≥60% title overlap), so a wrong URL is rejected, never indexed.
+
+```bash
+uv run research-kb discover "your topic terms" -p arxiv -p crossref   # → work/acquire-manifest.yaml
+uv run research-kb acquire --manifest work/acquire-manifest.yaml       # download + verify
+uv run research-kb index --scan reference
+```
+
+For the incremental-refresh cron (playbook step 9), `--refresh` fetches only material newer than each
+provider's last run and advances the marker (persisted in `work/discovery-state.yaml`):
+
+```bash
+uv run research-kb discover "your topic terms" --refresh   # only the delta since last run
+```
+
 ## MCP tools
 
 Run the server with `uv run research-kb-mcp` (the checked-in `.mcp.json` registers it for Claude
