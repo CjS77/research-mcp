@@ -44,8 +44,9 @@ uv run research-kb distill --all   # writes work/distilled/<stem>/llm.md
 Run the server with `uv run research-kb-mcp` (the checked-in `.mcp.json` registers it for Claude
 Code). It exposes five tools:
 
-- `kb_search(query, k, doc_type, tier, phase, facet_a, facet_b)` — hybrid search; split a query on
-  `|` to fuse independent facets. Returns ranked hits with full provenance.
+- `kb_search(query, k, doc_type, tier, phase, facets)` — hybrid search; `facets` is a name→value
+  mapping over the profile's declared facet axes. Split a query on `|` to fuse independent search
+  terms. Returns ranked hits with full provenance.
 - `kb_get_paper(identifier)` — a document's metadata, section outline, and distilled-artifact paths.
 - `kb_get_context(chunk_id)` — the parent section and neighbouring chunks around a hit.
 - `kb_follow_citations(document_id, direction)` — walk the citation graph (`out` = works this cites;

@@ -55,6 +55,11 @@ Before touching code, pin the corpus down with the user. Ask for:
 - **Time range & size** — "everything since 2018", or a curated ~100.
 - **Language** — drives the embedding-model choice (step 2).
 - **How much the agent may quote directly** — decides which sources become the *core* tier.
+- **Filter facets** — the axes an agent will narrow searches by (each a name + its vocabulary), e.g.
+  *clade*/*period* for dinosaurs, *compound*/*condition* for a drug field. Explain that facets are how
+  a query is scoped to a slice of the corpus, propose a starting set from the field, and let the user
+  add, drop, or rename axes. There is no fixed count — declare as many as the topic warrants. You
+  author these into the profile in step 2 (`config.py` `DEFAULT_FACETS`).
 - **A name for the KB** — default `<topic>-kb`; the user may pick anything (`dinosaurs-kb`).
 
 Turn the answers into a short written scope note; the manifest in step 3 is built from it.
@@ -89,10 +94,13 @@ Edit the knobs in [the table below](#what-must-be-domain-tuned). Concretely:
 
 - Pick the **core set** — the load-bearing sources an agent may quote directly. Start empty; fill it
   after discovery. (`config.py` `DEFAULT_CORE_SOURCES`.)
-- Fill the **two facet vocabularies** (`enrich.py` `_FACET_A_TERMS` / `_FACET_B_TERMS`) with the two
-  most useful axes of *this* field — for dinosaurs maybe *clade* and *period*; for a drug field
-  *compound* and *condition*; for a framework *module* and *version*. Optionally rename the
-  `kb_search` params `facet_a` / `facet_b` to those words. These become the filterable facets.
+- Declare the **named facets** in `config.py` `DEFAULT_FACETS` — an ordered list of
+  `FacetSpec(name=…, terms=(…))`, one per filter axis of *this* field, with as many axes as the topic
+  warrants (no longer a fixed two). For dinosaurs maybe *clade* and *period*; for a drug field
+  *compound* and *condition*; for a framework *module* and *version*. Each facet's `name` becomes a
+  filter key in `kb_search` and the `terms` are the vocabulary enrichment tags documents against.
+  Confirm the axis names and vocabularies with the user (the facet interview in step 0); the declared
+  names are recorded in `kb_meta`, so changing them later is a rebuild, not a migration.
 - Rewrite the **claim markers** (`divergence.py`) and **atomic-unit keywords** (`chunk.py`) only if
   the generic defaults miss what "a load-bearing claim" or "an indivisible unit" means here.
 - Set the **notation note** and **extraction prompt** for the medium (equations matter for STEM;
@@ -225,8 +233,7 @@ Everything else is reused unchanged. Locations are within `template/src/research
 |------|----------|---------|---------------|
 | Package / script / server names | `pyproject.toml`, `mcp_server.py` `FastMCP(...)`, `.mcp.json` | `research-kb` | `<name>-kb` |
 | Core (quotable) source set | `config.py` `DEFAULT_CORE_SOURCES` / `core_sources` | empty | the load-bearing sources an agent may quote directly |
-| Facet A / B vocabularies | `enrich.py` `_FACET_A_TERMS` / `_FACET_B_TERMS` | empty | the two most useful filter axes of the field |
-| Facet names | `facet_a` / `facet_b` — params in `mcp_server.py` + `cli.py`, columns in `models.py`/`schema.sql` | generic | rename to the field's axes (clade/period, compound/condition, module/version…) |
+| Named facets (axes + vocabularies) | `config.py` `DEFAULT_FACETS` (a list of `FacetSpec{name, terms}`); consumed by `enrich.py`, `search.py`, `mcp_server.py`/`cli.py`, and recorded in `kb_meta` | empty | an ordered list of the field's filter axes — each a name + its vocabulary (clade/period, compound/condition, module/version…); declare as many as the topic warrants |
 | Claim markers | `divergence.py` `_CLAIM_MARKERS`, `_claim_severity` | generic strong-claim verbs & quantifiers | the words that mark a load-bearing claim in the field |
 | Atomic-unit keywords | `chunk.py` `_ATOMIC_KEYWORDS` | academic (theorem/proof/algorithm/…) | the field's indivisible units (clause/holding, trial/cohort, listing/figure) |
 | Notation note | `enrich.py` `notation_note` | none | domain notation guidance, or leave empty |
