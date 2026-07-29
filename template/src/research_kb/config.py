@@ -130,6 +130,11 @@ class Settings(BaseSettings):
         """Directory holding distillation artifacts for a document stem."""
         return self.distilled_dir / doc_stem
 
+    @property
+    def discovery_state_path(self) -> Path:
+        """Where incremental discovery persists each provider's last-run date (under work/)."""
+        return self.distilled_dir.parent / "discovery-state.yaml"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
