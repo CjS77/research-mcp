@@ -13,6 +13,18 @@ from research_kb.config import Settings
 from research_kb.extract import claude_cli
 
 
+@pytest.fixture(autouse=True)
+def _claude_on_path(monkeypatch):
+    """Pretend the ``claude`` CLI is installed so the mocked subprocess is actually reached.
+
+    Every extraction test stubs ``subprocess.run`` but not the PATH probe. On a runner without the
+    ``claude`` binary, ``claude_available`` short-circuits ``run_claude_extraction`` to ``None``
+    before the mock runs, so the tests would only pass on a machine that happens to have Claude Code
+    installed. Forcing availability makes them environment-independent.
+    """
+    monkeypatch.setattr(claude_cli, "claude_available", lambda settings=None: True)
+
+
 def _blank_pdf(path, pages: int) -> None:
     doc = pymupdf.open()
     for _ in range(pages):
