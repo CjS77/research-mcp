@@ -90,6 +90,16 @@ the new directory automatically — no path edits needed.
 
 ### 2. Author the domain profile
 
+**Draft first, don't author from scratch.** Run
+`research-kb profile-init "<topic description>"` — it proposes values for every knob below (the named
+facets, atomic-unit keywords, claim markers, extraction prompt, notation note, plus guidance for the
+corpus-dependent ones) into `work/profile-draft.md` as paste-ready Python snippets keyed to each
+knob's home file. It uses the configured LLM backend (`KB_LLM_EXTRACT_BACKEND` — `claude_cli`/`api`)
+and degrades to a fill-in scaffold when no backend is available. The draft is a **proposal only,
+never applied**: review and edit it with the user (this is where the facet interview from step 0
+lands), then copy each block into its knob. The rest of this section is the reference for what you're
+editing.
+
 Edit the knobs in [the table below](#what-must-be-domain-tuned). Concretely:
 
 - Pick the **core set** — the load-bearing sources an agent may quote directly. Start empty; fill it
@@ -295,9 +305,11 @@ making each instance better:
    of named facets declared in the profile, with the MCP tool exposing them dynamically. Removes the
    last hardcoded shape in the schema and lets a topic define as many filter axes as it warrants.
    This is the priority build.
-2. **LLM-authored profile.** At bootstrap, have the agent draft the whole profile (facet
-   vocabularies, atomic units, claim markers, extraction prompt) from the topic description — it
-   knows the field. Ship a `profile-init` step that proposes a profile for the user to edit.
+2. **LLM-authored profile.** *(Built — `research-kb profile-init "<topic>"`; see step 2.)* At
+   bootstrap the agent drafts the whole profile (facet vocabularies, atomic units, claim markers,
+   extraction prompt, notation note) from the topic description into an editable
+   `work/profile-draft.md` — it knows the field. The draft is proposed for the user to edit, never
+   applied; with no LLM backend it degrades to a fill-in scaffold.
 3. **Web-source ingestion.** Local `.md`/`.txt` are already first-class; add a fetch → Markdown
    adapter so a remote page/doc/standard can be pulled straight into `reference/`. Depends on the
    [download-robustness](#source-discovery-reference) hardening — reuse the same believable-browser

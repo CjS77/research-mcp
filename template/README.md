@@ -39,6 +39,21 @@ Optionally distil PDFs to a committed LLM transcription first (improves math/lay
 uv run research-kb distill --all   # writes work/distilled/<stem>/llm.md
 ```
 
+## Drafting the domain profile
+
+The engine is corpus-agnostic; a handful of knobs encode domain knowledge (facets, atomic-unit
+keywords, claim markers, the extraction prompt, the notation note — see "What must be domain-tuned"
+in the top-level playbook). `profile-init` proposes values for all of them from a one-line topic
+description, so you edit rather than author from scratch:
+
+```bash
+uv run research-kb profile-init "your topic description"   # → work/profile-draft.md (a proposal)
+```
+
+The draft is **never applied** — it lands in `work/profile-draft.md` as paste-ready Python snippets
+keyed to each knob's home file, for you to review, tune, and copy in. It uses the configured LLM
+backend (`KB_LLM_EXTRACT_BACKEND`) when one is available and degrades to a fill-in scaffold offline.
+
 ## Discovering sources
 
 Turn a topic query into a **verified-acquisition manifest** without hand-guessing PDF URLs. The
