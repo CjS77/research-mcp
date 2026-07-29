@@ -469,6 +469,33 @@ def distill(targets, all_pdfs, force, segment_pages, model, effort) -> None:
     click.echo(f"distilled={done} skipped={skipped} failed={failed}")
 
 
+@main.command("profile-init")
+@click.argument("topic")
+@click.option("--out", type=click.Path(), default=None,
+              help="Where to write the draft (default: work/profile-draft.md).")
+@click.option("--offline", is_flag=True,
+              help="Skip the LLM backend; emit the scaffold to fill in by hand.")
+def profile_init(topic: str, out: str | None, offline: bool) -> None:
+    """Draft a domain profile from a TOPIC description for you to review and edit.
+
+    Proposes values for every tunable knob — facets, atomic-unit keywords, claim markers, the
+    extraction prompt, the notation note — plus guidance for the corpus-dependent ones. NOTHING is
+    applied: the draft lands in work/profile-draft.md as paste-ready snippets for you to copy into
+    the knobs. Uses the configured LLM backend when available, else emits a scaffold to fill in.
+    """
+    from .profile import draft_profile, render_draft
+
+    s = get_settings()
+    draft = draft_profile(topic, s, offline=offline)
+    dest = Path(out) if out else s.profile_draft_path
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(render_draft(draft), encoding="utf-8")
+
+    click.echo(f"drafted profile ({draft.source}) for {topic!r} -> {dest}")
+    click.echo(f"  facets: {', '.join(f.name for f in draft.facets) or '(none — fill in)'}")
+    click.echo("  a proposal, not a config: review, edit, then copy each block into its knob (see the file header).")
+
+
 @main.command()
 def serve() -> None:
     """Start the MCP server (stdio). Equivalent to `research-kb-mcp`."""

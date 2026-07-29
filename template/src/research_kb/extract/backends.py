@@ -13,6 +13,9 @@ or OpenCode CLI — means *registering a module here*, not editing a dispatcher.
   (``index`` would fan out hundreds of subprocesses); they are produced ahead of time by
   ``research-kb distill``. Only cheap single-call backends set this ``True``.
 - ``unavailable_hint(settings) -> str`` — a one-line fix shown when ``available`` is ``False``.
+- ``complete(prompt, settings) -> str | None`` — *optional* plain text-in/text-out generation (no
+  PDF), reusing the same model access as distillation for authoring tasks such as
+  ``research-kb profile-init``. ``None`` when a backend offers no text path (e.g. the ``none`` backend).
 
 Only the Claude backend ships today. ``codex_cli`` and ``opencode_cli`` are reserved names for the
 same contract — implement them by adding a sibling module and one ``register(...)`` call below.
@@ -40,6 +43,9 @@ class Backend:
     extract: Callable[[Path, Settings], str | None]
     index_time_safe: bool = False
     unavailable_hint: Callable[[Settings], str] = _default_hint
+    # Optional text-in/text-out generation (no PDF). Present on backends whose model access can serve
+    # authoring tasks (profile-init); ``None`` when the backend has no such path.
+    complete: Callable[[str, Settings], str | None] | None = None
 
 
 _REGISTRY: dict[str, Backend] = {}
@@ -82,6 +88,12 @@ def _claude_hint(settings: Settings) -> str:
     return f"`{settings.claude_bin}` not found on PATH; install Claude Code or set KB_CLAUDE_BIN"
 
 
+def _claude_complete(prompt: str, settings: Settings) -> str | None:
+    from .claude_cli import run_claude_prompt
+
+    return run_claude_prompt(prompt, settings)
+
+
 # --- api: Anthropic API, single-call (cheap — safe to run live at index time) --------------------
 
 
@@ -95,12 +107,23 @@ def _api_extract(path: Path, settings: Settings) -> str | None:
     return run_api_extraction(path, settings)
 
 
+def _api_complete(prompt: str, settings: Settings) -> str | None:
+    from .llm import run_api_prompt
+
+    return run_api_prompt(prompt, settings)
+
+
 def _api_hint(settings: Settings) -> str:
     return "set ANTHROPIC_API_KEY and install the 'llm' extra (anthropic)"
 
 
 register(
-    Backend("claude_cli", _claude_available, _claude_extract, index_time_safe=False, unavailable_hint=_claude_hint)
+    Backend(
+        "claude_cli", _claude_available, _claude_extract,
+        index_time_safe=False, unavailable_hint=_claude_hint, complete=_claude_complete,
+    )
 )
-register(Backend("api", _api_available, _api_extract, index_time_safe=True, unavailable_hint=_api_hint))
+register(
+    Backend("api", _api_available, _api_extract, index_time_safe=True, unavailable_hint=_api_hint, complete=_api_complete)
+)
 register(Backend("none", lambda s: True, lambda p, s: None, index_time_safe=True))

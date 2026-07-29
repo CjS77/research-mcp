@@ -70,6 +70,31 @@ def run_api_extraction(path: Path, settings: Settings | None = None) -> str | No
         return None
 
 
+def run_api_prompt(prompt: str, settings: Settings | None = None) -> str | None:
+    """One text-only Anthropic API call (bills per token). Returns the model text, or ``None``.
+
+    The text-in/text-out counterpart to :func:`run_api_extraction`, for authoring tasks (e.g.
+    ``profile-init``) that send a prompt and expect Markdown/JSON back rather than transcribing a PDF.
+    """
+    settings = settings or get_settings()
+    if not settings.has_anthropic:
+        return None
+    try:
+        import anthropic
+    except ImportError:
+        return None
+    try:
+        client = anthropic.Anthropic()
+        message = client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=settings.llm_max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return "".join(block.text for block in message.content if getattr(block, "type", None) == "text")
+    except Exception:
+        return None
+
+
 def run_live_extraction(path: Path, settings: Settings | None = None) -> str | None:
     """Run the configured live distill backend (see :mod:`research_kb.extract.backends`)."""
     settings = settings or get_settings()
