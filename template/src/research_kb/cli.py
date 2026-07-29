@@ -510,6 +510,21 @@ def _assets_arg(asset: str) -> tuple[str, ...]:
     return ASSETS if asset == "all" else (asset,)
 
 
+@backup.command("init")
+def backup_init() -> None:
+    """Set up backup interactively: choose targets, generate + store the encryption key, prove a round-trip.
+
+    Detects rclone / the OS keychain, lets you pick where each asset goes (cloud / local / don't back
+    up), generates the crypt passphrase and shows it once to save, verifies each target end to end, and
+    writes the config so later `backup push` / the refresh cron run headless. Auth stays with you
+    (`rclone config`); the wizard never handles provider secrets.
+    """
+    from .backup.wizard import run_wizard
+    from .config import BACKUP_ENV_FILE
+
+    run_wizard(get_settings(), BACKUP_ENV_FILE)
+
+
 @backup.command("push")
 @click.option("--asset", type=_ASSET_CHOICE, default="all", help="Which asset(s) to back up.")
 @click.option("--json", "as_json", is_flag=True)

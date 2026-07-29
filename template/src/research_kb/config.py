@@ -17,6 +17,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Repo root = two levels up from this file (src/research_kb/config.py -> repo).
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# The backup-setup wizard (`research-kb backup init`) persists KB_BACKUP_* here; Settings loads it so
+# later headless runs (`backup push` / the refresh cron) pick the config up with no rerun. It lives
+# under work/ and is gitignored, so environment-specific config never lands in git.
+BACKUP_ENV_FILE = REPO_ROOT / "work" / "backup.env"
+
 # Core-tier sources: the load-bearing works an agent may quote directly. Matched against the
 # source file stem. Empty by default — an instance fills it with its own core works.
 DEFAULT_CORE_SOURCES: frozenset[str] = frozenset()
@@ -49,7 +54,9 @@ DEFAULT_FACETS: tuple[FacetSpec, ...] = ()
 class Settings(BaseSettings):
     """Environment-driven settings. Prefix ``KB_`` (e.g. ``KB_EMBED_BACKEND=tei``)."""
 
-    model_config = SettingsConfigDict(env_prefix="KB_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="KB_", extra="ignore", env_file=str(BACKUP_ENV_FILE), env_file_encoding="utf-8"
+    )
 
     # --- Storage -----------------------------------------------------------------
     # All MCP-server state lives under work/ (index, distilled artifacts, eval set).

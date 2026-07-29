@@ -6,6 +6,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Backup-setup config written by `research-kb backup init` (rclone remote name, local dir).
+# Environment-specific; the crypt passphrase itself lives in the OS keychain, never here.
+/work/backup.env
+
 # KB index can exceed GitHub's 100 MB per-file limit.
 # Rebuild with `research-kb init && research-kb index --scan reference`, or fetch it (see README).
 /work/data/
