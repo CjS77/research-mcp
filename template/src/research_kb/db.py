@@ -8,6 +8,7 @@ so a later run with an incompatible dimension fails loudly instead of corrupting
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import struct
 from importlib import resources
@@ -61,7 +62,10 @@ def _init_meta(con: sqlite3.Connection, settings: Settings) -> None:
         set_meta(con, "embed_dim", str(settings.embed_dim))
         set_meta(con, "embed_backend", settings.embed_backend)
         set_meta(con, "embed_model", settings.embed_model)
-        set_meta(con, "schema_version", "1")
+        # Declared facet names, in order — keeps the DB self-describing (query surfaces read these
+        # to advertise the filterable axes). Changing the profile's facets is a rebuild, not a migration.
+        set_meta(con, "facet_names", json.dumps([f.name for f in settings.facets]))
+        set_meta(con, "schema_version", "2")
     elif int(existing_dim) != settings.embed_dim:
         raise RuntimeError(
             f"embedding dimension mismatch: DB was built at dim={existing_dim} but config is "
@@ -72,6 +76,18 @@ def _init_meta(con: sqlite3.Connection, settings: Settings) -> None:
 def get_meta(con: sqlite3.Connection, key: str) -> str | None:
     row = con.execute("SELECT value FROM kb_meta WHERE key = ?", (key,)).fetchone()
     return row[0] if row else None
+
+
+def get_facet_names(con: sqlite3.Connection) -> list[str]:
+    """The facet axis names this DB was built with (from kb_meta), for advertising filterable facets."""
+    raw = get_meta(con, "facet_names")
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    return [str(x) for x in parsed] if isinstance(parsed, list) else []
 
 
 def set_meta(con: sqlite3.Connection, key: str, value: str) -> None:

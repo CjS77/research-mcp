@@ -20,10 +20,20 @@ from .models import SearchHit
 _WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9\-]*")
 _FTS_STOP = frozenset({"the", "a", "an", "of", "to", "in", "on", "is", "and", "or", "how", "does", "what", "where"})
 _FILTER_COLS = ("doc_type", "tier", "phase")
-_JSON_FILTER_COLS = ("facet_b", "facet_a")
+
+
+def _json_path(name: str) -> str:
+    """SQLite JSON path for a facet name, with the name double-quote-escaped (bound as a parameter)."""
+    return '$."' + name.replace('"', '""') + '"'
 
 
 def _filter_sql(filters: dict[str, object] | None, alias: str = "d") -> tuple[str, list[object]]:
+    """Build the WHERE fragment for scalar filters (doc_type/tier/phase) and named facets.
+
+    ``filters["facets"]`` is a mapping ``{facet_name: value | [values]}``; a document matches when the
+    value appears in that facet's array on its ``facets`` JSON column. json_each gives an exact
+    array-membership test (no cross-facet false positives), and COALESCE tolerates a NULL column.
+    """
     if not filters:
         return "", []
     clauses: list[str] = []
@@ -32,12 +42,16 @@ def _filter_sql(filters: dict[str, object] | None, alias: str = "d") -> tuple[st
         if filters.get(col) is not None:
             clauses.append(f"{alias}.{col} = ?")
             params.append(filters[col])
-    for col in _JSON_FILTER_COLS:
-        values = filters.get(col)
-        if values:
+    facets = filters.get("facets")
+    if isinstance(facets, dict):
+        for name, values in facets.items():
             for v in values if isinstance(values, list) else [values]:
-                clauses.append(f"{alias}.{col} LIKE ?")
-                params.append(f'%"{v}"%')
+                clauses.append(
+                    f"EXISTS (SELECT 1 FROM json_each(COALESCE({alias}.facets, '{{}}'), ?) je "
+                    f"WHERE je.value = ?)"
+                )
+                params.append(_json_path(str(name)))
+                params.append(v)
     return (" AND " + " AND ".join(clauses)) if clauses else "", params
 
 

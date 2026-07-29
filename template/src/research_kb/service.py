@@ -11,6 +11,7 @@ from typing import Any
 
 from .citations import acquisition_targets
 from .config import Settings, get_settings
+from .db import get_facet_names
 from .embed.base import EmbeddingProvider
 from .search import hybrid_search
 from .store import (
@@ -75,8 +76,8 @@ def get_paper_service(con: sqlite3.Connection, identifier: str | int) -> dict[st
 
     return {
         "id": doc.id, "title": doc.title, "source_path": doc.source_path, "doc_type": doc.doc_type,
-        "tier": doc.tier, "phase": doc.phase, "year": doc.year, "facet_a": doc.facet_a,
-        "facet_b": doc.facet_b, "page_count": doc.page_count, "word_count": doc.word_count,
+        "tier": doc.tier, "phase": doc.phase, "year": doc.year, "facets": doc.facets,
+        "page_count": doc.page_count, "word_count": doc.word_count,
         "validated": doc.validated, "section_outline": outline, "artifacts": artifacts,
     }
 
@@ -156,11 +157,14 @@ def list_corpus_service(
         documents.append(
             {
                 "id": d.id, "title": d.title, "source_path": d.source_path, "doc_type": d.doc_type,
-                "tier": d.tier, "phase": d.phase, "facet_a": d.facet_a, "facet_b": d.facet_b,
+                "tier": d.tier, "phase": d.phase, "facets": d.facets,
                 "validated": d.validated, "chunks": chunk_count,
             }
         )
-    result: dict[str, Any] = {"count": len(documents), "documents": documents}
+    # Advertise the declared facet axes (the names kb_search filters on) so they're discoverable.
+    result: dict[str, Any] = {
+        "count": len(documents), "documents": documents, "facets": get_facet_names(con),
+    }
     if include_acquisition:
         result["acquisition_targets"] = acquisition_targets(con, limit=20)
     return result

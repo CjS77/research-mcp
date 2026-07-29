@@ -11,8 +11,7 @@ CREATE TABLE IF NOT EXISTS documents (
     tier TEXT NOT NULL DEFAULT 'breadth',   -- 'core' (validated, load-bearing) | 'breadth'
     title TEXT NOT NULL,
     phase INTEGER,                          -- 1/2/3 for staged research docs, NULL for source works
-    facet_b TEXT,                           -- JSON array (secondary facet)
-    facet_a TEXT,                           -- JSON array (primary facet)
+    facets TEXT,                            -- JSON object {facet_name: [values]}; named facets declared in the profile
     authors TEXT,                           -- JSON array
     year INTEGER,
     page_count INTEGER,

@@ -11,7 +11,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Repo root = two levels up from this file (src/research_kb/config.py -> repo).
@@ -20,6 +20,30 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # Core-tier sources: the load-bearing works an agent may quote directly. Matched against the
 # source file stem. Empty by default — an instance fills it with its own core works.
 DEFAULT_CORE_SOURCES: frozenset[str] = frozenset()
+
+
+class FacetSpec(BaseModel):
+    """One declared facet axis of the corpus: a name plus the vocabulary that tags a document.
+
+    Facets are the salient filter axes an agent narrows a search by (e.g. *clade*/*period* for
+    dinosaurs, *compound*/*condition* for a drug field). Frozen so the settings singleton stays
+    immutable and shareable; ``terms`` is a tuple for the same reason.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    terms: tuple[str, ...] = ()
+
+
+# Declared facets — the profile's named filter axes, in order. Empty by default; an instance fills
+# this with its domain's axes (see the bootstrap playbook's facet interview). Replaces the old fixed
+# facet_a/facet_b pair: a topic may declare as many named facets as it warrants. Example:
+#   DEFAULT_FACETS = (
+#       FacetSpec(name="clade", terms=("theropod", "sauropod", "ornithischian")),
+#       FacetSpec(name="period", terms=("triassic", "jurassic", "cretaceous")),
+#   )
+DEFAULT_FACETS: tuple[FacetSpec, ...] = ()
 
 
 class Settings(BaseSettings):
@@ -91,6 +115,11 @@ class Settings(BaseSettings):
     pdf_extractor: str = Field(default="pymupdf")
 
     core_sources: frozenset[str] = Field(default=DEFAULT_CORE_SOURCES)
+
+    # Named facets declared by the profile (see DEFAULT_FACETS). Enrichment tags each document
+    # against these vocabularies; kb_search filters on any facet by name. The declared names are
+    # recorded in kb_meta at init, so the DB stays self-describing — changing them is a rebuild.
+    facets: tuple[FacetSpec, ...] = Field(default=DEFAULT_FACETS)
 
     @property
     def has_anthropic(self) -> bool:

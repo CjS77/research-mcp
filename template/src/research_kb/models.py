@@ -25,8 +25,9 @@ class Document(BaseModel):
     tier: Tier = "breadth"
     title: str
     phase: int | None = None
-    facet_b: list[str] = Field(default_factory=list)  # secondary facet
-    facet_a: list[str] = Field(default_factory=list)  # primary facet
+    # Named facets: {facet_name: [values]}. The declared axes live in the profile (config.FacetSpec);
+    # a document carries only the facets it exhibits.
+    facets: dict[str, list[str]] = Field(default_factory=dict)
     authors: list[str] = Field(default_factory=list)
     year: int | None = None
     page_count: int | None = None
