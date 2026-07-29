@@ -19,6 +19,10 @@ dependencies = [
     # the shipped DB records embed_backend=fastembed, so serving queries requires it.
     "fastembed>=0.4",
     "trafilatura>=1.8",
+    # OS-keychain access for the backup crypt passphrase (read non-interactively at push/restore).
+    # Pure-Python; degrades to the KB_BACKUP_PASSPHRASE env / prompt when no keychain backend exists.
+    # (rclone itself is invoked as an external binary — deliberately not vendored.)
+    "keyring>=25",
 ]
 
 [project.optional-dependencies]
