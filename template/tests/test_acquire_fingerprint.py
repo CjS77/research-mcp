@@ -68,6 +68,19 @@ class _FakeClient:
         return _FakeResponse(200, self._content)
 
 
+class _SequencedClient:
+    """Returns a queued sequence of (status, content) responses, one per `.get` call."""
+
+    def __init__(self, responses: list[tuple[int, bytes]]):
+        self._responses = list(responses)
+        self.calls = 0
+
+    def get(self, url, headers=None):
+        self.calls += 1
+        status, content = self._responses[min(self.calls - 1, len(self._responses) - 1)]
+        return _FakeResponse(status, content)
+
+
 def test_download_sends_browser_fingerprint(tmp_path, monkeypatch):
     fp = acquire._FINGERPRINTS[0]
     monkeypatch.setattr(acquire, "_browser_headers", lambda: dict(fp))
@@ -116,3 +129,49 @@ def test_verification_stays_unconditional(tmp_path, monkeypatch):
     )
     res = acquire.acquire_from_manifest(manifest, tmp_path / "dest")
     assert res.rejected and not res.acquired
+
+
+# --- Backoff triggers on 429/5xx but never on a deterministic status ------------------------------
+
+
+def test_fetch_pdf_retries_on_transient_then_succeeds(monkeypatch):
+    # 429 (throttled) then 503 (transient) are retried with backoff; the 3rd attempt's PDF wins.
+    backoffs: list[int] = []
+    monkeypatch.setattr(acquire, "_sleep_backoff", lambda base, attempt: backoffs.append(attempt))
+    client = _SequencedClient([(429, b"slow down"), (503, b"unavailable"), (200, b"%PDF-1.7 ok")])
+    content, reason = acquire._fetch_pdf(client, "http://x/a", attempts=4, backoff=3.0, headers=acquire._FINGERPRINTS[0])
+    assert content == b"%PDF-1.7 ok" and reason == ""
+    assert client.calls == 3  # stopped as soon as the PDF arrived
+    assert backoffs == [0, 1]  # a backoff between each of the two retries, exponent growing
+
+
+def test_fetch_pdf_exhausts_attempts_on_persistent_5xx(monkeypatch):
+    backoffs: list[int] = []
+    monkeypatch.setattr(acquire, "_sleep_backoff", lambda base, attempt: backoffs.append(attempt))
+    client = _SequencedClient([(503, b"unavailable")])
+    content, reason = acquire._fetch_pdf(client, "http://x/a", attempts=3, backoff=3.0, headers=acquire._FINGERPRINTS[0])
+    assert content is None and reason == "HTTP 503"
+    assert client.calls == 3  # all attempts spent
+    assert backoffs == [0, 1]  # backoff between attempts, none after the last
+
+
+def test_fetch_pdf_does_not_retry_deterministic_403(monkeypatch):
+    # A 403 is a hard block on this route — retrying the same source is pointless, so we break out
+    # immediately and let the Wayback fallback take over instead of burning attempts + backoff.
+    backoffs: list[int] = []
+    monkeypatch.setattr(acquire, "_sleep_backoff", lambda base, attempt: backoffs.append(attempt))
+    client = _SequencedClient([(403, b"forbidden")])
+    content, reason = acquire._fetch_pdf(client, "http://x/a", attempts=4, backoff=3.0, headers=acquire._FINGERPRINTS[0])
+    assert content is None and reason == "HTTP 403"
+    assert client.calls == 1  # no retry on a deterministic status
+    assert backoffs == []  # and therefore no backoff sleep
+
+
+# --- Verification stays unconditional: a non-PDF response is rejected by magic bytes --------------
+
+
+def test_verify_pdf_rejects_non_pdf_magic_bytes(tmp_path):
+    junk = tmp_path / "challenge.pdf"
+    junk.write_bytes(b"<!DOCTYPE html><html>Access denied</html>")
+    ok, reason = acquire.verify_pdf(junk, "A Very Specific Unique Title")
+    assert not ok and "not a PDF" in reason
