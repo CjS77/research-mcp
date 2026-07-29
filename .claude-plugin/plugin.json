@@ -1,6 +1,6 @@
 {
   "name": "research-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Bootstrap a fidelity-first research knowledge base (RAG) on any topic and serve it to agents over MCP.",
   "author": {
     "name": "CjS77",
