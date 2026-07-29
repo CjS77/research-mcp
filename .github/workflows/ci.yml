@@ -1,0 +1,23 @@
+name: CI
+
+# Runs the engine's quality gates. Activates once this plugin is hosted on GitHub; harmless before.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: template
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync
+      - run: uv run ruff check src/ tests/
+      - run: uv run mypy src/
+      - run: uv run pytest -q

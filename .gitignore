@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local, per-developer Claude Code settings (not part of the shipped plugin)
+.claude/settings.local.json
+
+# Editor / OS cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# The template/ engine has its own .gitignore for per-instance work/ and index artifacts.

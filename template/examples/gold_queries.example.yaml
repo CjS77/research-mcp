@@ -1,0 +1,23 @@
+# Gold queries for `research-kb eval` — real questions paired with the source that should answer them.
+# `eval` reports recall@k and MRR (did the expected source rank in the top k?) plus a faithfulness
+# check (every stored verbatim chunk still hashes to its source span).
+#
+# Copy this to work/eval/gold_queries.yaml and replace the rows with questions real users would ask
+# your KB. Aim for >80% recall@10; tune knobs (chunk size, RRF weights, embedding model) only against
+# this number.
+#
+# Each entry:
+#   query                — the natural-language question (required)
+#   expected_source_path — repo-relative path of the source that should answer it (required)
+#   expected_section     — optional section number the answer lives in
+#   expected_page        — optional page number
+#   notes                — optional free text (why this is the expected answer)
+
+- query: How does the Beta method remove noise without a reference template?
+  expected_source_path: reference/beta-denoising-method.md
+  notes: The overview section states it needs no reference template.
+
+- query: What convergence guarantee does the Alpha forecasting estimator provide?
+  expected_source_path: reference/alpha-forecasting-method.md
+  expected_section: "2"
+  notes: Theorem 1 — the estimator converges to the true mean under mild regularity.
