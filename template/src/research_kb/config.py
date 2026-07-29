@@ -121,6 +121,37 @@ class Settings(BaseSettings):
     # recorded in kb_meta at init, so the DB stays self-describing — changing them is a rebuild.
     facets: tuple[FacetSpec, ...] = Field(default=DEFAULT_FACETS)
 
+    # --- Backup (see research_kb.backup) -----------------------------------------
+    # Durable, encrypted backup of the two irreplaceable assets. Per-asset target is a *list* of
+    # registered target names ("rclone" | "local" | "none"), so cloud + local (3-2-1) is possible.
+    # Defaults: the token-expensive distillation artifacts go to a cloud provider via rclone; the
+    # index defaults to "don't backup" (the one-command `rebuild` is its safety net). Interactive
+    # target/key setup is the backup-setup wizard's job — the engine only *consumes* this config.
+    backup_artifacts_targets: tuple[str, ...] = Field(default=("rclone",))
+    backup_index_targets: tuple[str, ...] = Field(default=("none",))
+    # Client-side encryption via rclone's `crypt` overlay, on by default for *every* target
+    # (including local). Toggle it off for specific targets by name via backup_plaintext_targets.
+    backup_encrypt: bool = Field(default=True)
+    backup_plaintext_targets: tuple[str, ...] = Field(default=())
+    # After a push, pull each asset straight back into a temp dir and re-verify every file's hash
+    # against the manifest — "a backup that can't be proven to restore is not a backup".
+    backup_verify_pushes: bool = Field(default=True)
+    # local target: the directory / mounted drive backups are copied into.
+    backup_local_dir: Path | None = Field(default=None)
+    # rclone target: a configured remote (e.g. "gdrive:kb-backup", "s3:bucket/prefix"). The remote
+    # itself is set up out-of-band (`rclone config` / the wizard); the engine never handles OAuth.
+    backup_rclone_remote: str = Field(default="")
+    backup_rclone_bin: str = Field(default="rclone")
+    backup_rclone_timeout_s: int = Field(default=1800)
+    # OS-keychain coordinates for the crypt passphrase (read non-interactively at push/restore).
+    # The wizard generates the passphrase and writes it here; the engine only reads it.
+    backup_keyring_service: str = Field(default="research-kb-backup")
+    backup_keyring_account: str = Field(default="crypt-passphrase")
+    # Forward-looking: new KBs may `.gitignore` work/distilled once cloud backup is configured, so the
+    # token-expensive artifacts live in the backup rather than the repo. Off by default — flipping it
+    # is a deliberate choice the bootstrap/wizard makes, and it never deletes already-committed files.
+    gitignore_distilled: bool = Field(default=False)
+
     @property
     def has_anthropic(self) -> bool:
         """True when an Anthropic key is present, enabling LLM extraction/enrichment."""
@@ -139,6 +170,11 @@ class Settings(BaseSettings):
     def profile_draft_path(self) -> Path:
         """Where ``research-kb profile-init`` writes the editable draft profile (under work/)."""
         return self.distilled_dir.parent / "profile-draft.md"
+
+    @property
+    def backup_manifest_path(self) -> Path:
+        """Where the backup manifest (per-file hash + target locations + timestamps) lives (under work/)."""
+        return self.distilled_dir.parent / "backup-manifest.json"
 
 
 @lru_cache(maxsize=1)

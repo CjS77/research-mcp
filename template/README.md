@@ -125,6 +125,12 @@ Every knob is an environment variable with the `KB_` prefix (see `src/research_k
 | `KB_RRF_K` | `60` | RRF rank constant |
 | `KB_PDF_EXTRACTOR` | `pymupdf` | `pymupdf` (fast) or `marker` (heavier, higher-fidelity layout) |
 | `KB_LLM_EXTRACT_BACKEND` | `claude_cli` | distill backend for the LLM cross-check — see [Distill backends](#distill-backends) |
+| `KB_BACKUP_ARTIFACTS_TARGETS` | `["rclone"]` | target list for the distillation artifacts (cloud by default) — see [Backup & restore](#backup--restore) |
+| `KB_BACKUP_INDEX_TARGETS` | `["none"]` | target list for the index ("don't backup" — `rebuild` is its safety net) |
+| `KB_BACKUP_ENCRYPT` | `true` | client-side encryption (rclone `crypt`) on for every target; opt out per target with `KB_BACKUP_PLAINTEXT_TARGETS` |
+| `KB_BACKUP_LOCAL_DIR` | _(unset)_ | the `local` target's directory / mounted drive |
+| `KB_BACKUP_RCLONE_REMOTE` | _(unset)_ | the `rclone` target's remote, e.g. `gdrive:kb-backup` (set up out-of-band) |
+| `KB_BACKUP_PASSPHRASE` | _(unset)_ | crypt passphrase fallback when the OS keychain is unavailable (never commit it) |
 
 A KB is self-describing: the embedding backend/model/dimension are written into the DB at index
 time, so queries reproduce the index's vector space without re-supplying `KB_EMBED_*`.
@@ -156,6 +162,61 @@ Only Claude ships today. `codex_cli` and `opencode_cli` are **reserved names** f
 
 `extract.llm.run_live_extraction` and the `distill` command resolve the backend through the registry,
 so nothing else changes.
+
+## Backup & restore
+
+Two assets are irreplaceable, and are protected differently:
+
+- **Distillation artifacts** (`work/distilled/<stem>/*.md`) — hours of token-expensive LLM
+  transcription. Default target: **a cloud provider** (via rclone).
+- **The index** (`work/data/kb.sqlite`) — rebuildable, >100 MB, gitignored. Default target: **`none`
+  ("don't backup")**; [`research-kb rebuild`](#rebuild) reconstructs it in one command.
+
+Backup is **explicit** — it runs only on `research-kb backup push` (or the refresh cron), never during
+`index`/`distill`, so serving stays offline. With nothing configured, `push`/`restore` are a clear
+no-op pointing at the setup wizard; the KB ships fully queryable without any backup.
+
+```bash
+research-kb backup push [--asset artifacts|index|all]   # encrypt + upload; each upload is verified
+research-kb backup restore [--asset …] [--target …]     # download + decrypt + verify into place
+research-kb backup status                                # targets, last-push time, drift
+```
+
+**Targets are a registry** ([`src/research_kb/backup/targets.py`](src/research_kb/backup/targets.py)),
+the same shape as the distill-backend registry — adding one (WebDAV, IPFS, …) means registering a
+module, not editing a dispatcher:
+
+| Target | What it is |
+| --- | --- |
+| `rclone` | any configured rclone remote — one adapter, every provider (Drive, Dropbox, OneDrive, Proton, S3, …); chunked, resumable, checksummed |
+| `local` | a directory / mounted drive (the on-site copy of a 3-2-1 setup, and the test target) |
+| `none` | "don't backup" (a valid, default choice for the index) |
+
+Each asset's target is a **list**, so cloud **+** local is possible. A `work/backup-manifest.json`
+records every file's SHA-256 + where it was pushed + when; restore fetches by the manifest and
+**re-verifies each hash** — a backup that can't be proven to restore is not a backup.
+
+**Encryption is on by default for every target** (including `local`), via rclone's `crypt` overlay.
+The passphrase is read non-interactively from the **OS keychain** (`keyring`), falling back to the
+`KB_BACKUP_PASSPHRASE` env var, then an interactive prompt — it is **never** written to the repo or
+the cloud. Generating the passphrase and caching it in the keychain is the **backup-setup wizard**'s
+job; the engine only consumes it.
+
+**Restoring on a fresh machine:** (1) install rclone and re-auth the remote (`rclone config` / the
+provider's OAuth — the same account); (2) supply the crypt passphrase (from your password manager into
+the keychain, or `KB_BACKUP_PASSPHRASE`); (3) `research-kb backup restore` to pull the artifacts back;
+(4) `research-kb rebuild` if the index was not backed up.
+
+### rebuild
+
+```bash
+research-kb rebuild    # reconstruct work/data/kb.sqlite from reference/ + committed artifacts
+```
+
+`rebuild` deletes any existing index and re-runs the pipeline, **reusing** the committed
+`distilled/<stem>/llm.md` transcriptions (it never re-distills — the heavy `claude_cli` backend is not
+index-time-safe), so a fresh clone with the artifacts present becomes queryable in one command. This
+is why the index can safely default to "don't backup".
 
 ## Registering the server
 
