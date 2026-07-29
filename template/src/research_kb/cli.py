@@ -496,6 +496,103 @@ def profile_init(topic: str, out: str | None, offline: bool) -> None:
     click.echo("  a proposal, not a config: review, edit, then copy each block into its knob (see the file header).")
 
 
+@main.group()
+def backup() -> None:
+    """Encrypted backup + restore of the KB's irreplaceable assets (artifacts, index)."""
+
+
+_ASSET_CHOICE = click.Choice(["artifacts", "index", "all"])
+
+
+def _assets_arg(asset: str) -> tuple[str, ...]:
+    from .backup import ASSETS
+
+    return ASSETS if asset == "all" else (asset,)
+
+
+@backup.command("push")
+@click.option("--asset", type=_ASSET_CHOICE, default="all", help="Which asset(s) to back up.")
+@click.option("--json", "as_json", is_flag=True)
+def backup_push(asset: str, as_json: bool) -> None:
+    """Encrypt + upload the configured asset(s) to their target(s); verify each upload."""
+    from .backup import push
+
+    def live(r) -> None:  # noqa: ANN001 — PushResult, printed as it resolves
+        marker = {"pushed": "OK  ", "noop": "SKIP", "unavailable": "N/A ", "error": "ERR "}.get(r.status, "    ")
+        stream = r.status in {"error"}
+        click.echo(f"  {marker} [{r.asset}/{r.target}] {r.detail}", err=stream)
+
+    results = push(get_settings(), _assets_arg(asset), on_result=None if as_json else live)
+    if as_json:
+        click.echo(_json.dumps([r.as_dict() for r in results], indent=2))
+        return
+    pushed = sum(1 for r in results if r.status == "pushed")
+    failed = [r for r in results if r.status == "error"]
+    click.echo(f"pushed={pushed} of {len(results)} target(s)")
+    if failed:
+        raise click.ClickException(f"{len(failed)} push(es) failed; nothing was recorded for them")
+
+
+@backup.command("restore")
+@click.option("--asset", type=_ASSET_CHOICE, default="all", help="Which asset(s) to restore.")
+@click.option("--target", default=None, help="Restore from this target only (default: first available recorded).")
+@click.option("--json", "as_json", is_flag=True)
+def backup_restore(asset: str, target: str | None, as_json: bool) -> None:
+    """Download + decrypt + verify the asset(s) from the manifest, placing them back into work/."""
+    from .backup import restore
+
+    def live(r) -> None:  # noqa: ANN001 — RestoreResult
+        marker = {"restored": "OK  ", "noop": "SKIP", "unavailable": "N/A ", "error": "ERR "}.get(r.status, "    ")
+        click.echo(f"  {marker} [{r.asset}/{r.target}] {r.detail}", err=r.status == "error")
+
+    results = restore(get_settings(), _assets_arg(asset), target=target, on_result=None if as_json else live)
+    if as_json:
+        click.echo(_json.dumps([r.as_dict() for r in results], indent=2))
+        return
+    restored = sum(1 for r in results if r.status == "restored")
+    failed = [r for r in results if r.status == "error"]
+    click.echo(f"restored={restored} of {len(results)} asset(s)")
+    if failed:
+        raise click.ClickException(f"{len(failed)} restore(s) failed hash verification or transfer")
+
+
+@backup.command("status")
+@click.option("--json", "as_json", is_flag=True)
+def backup_status(as_json: bool) -> None:
+    """Show configured targets, last-push time per asset/target, and drift since last push."""
+    from .backup import status
+
+    report = status(get_settings())
+    if as_json:
+        click.echo(_json.dumps(report.as_dict(), indent=2))
+        return
+    click.echo(f"manifest: {report.manifest_path}  (encryption default: {'on' if report.encryption_default else 'off'})")
+    for a in report.assets:
+        d = a.drift
+        drift_str = "clean" if d.clean else f"+{len(d.added)} -{len(d.removed)} ~{len(d.changed)}"
+        click.echo(f"\n{a.asset}: {a.n_files} file(s), targets={', '.join(a.targets)}  drift: {drift_str}")
+        for t in a.target_details:
+            avail = "available" if t["available"] else "unavailable"
+            enc = "encrypted" if t["encrypted"] else "plaintext"
+            last = t["last_push"] or "never pushed"
+            loc = f" @ {t['location']}" if t["location"] else ""
+            click.echo(f"    {t['name']:8} {avail:12} {enc:10} last: {last}{loc}")
+
+
+@main.command()
+def rebuild() -> None:
+    """Reconstruct work/data/kb.sqlite from reference/ + committed distillation artifacts (one command)."""
+    from .backup import rebuild as do_rebuild
+
+    summary = do_rebuild(get_settings())
+    click.echo(
+        f"rebuilt index: indexed={len(summary.indexed)} skipped={len(summary.skipped)} "
+        f"blocked={len(summary.blocked)} failed={len(summary.failed)} chunks={summary.chunks_created}"
+    )
+    for path, err in summary.failed:
+        click.echo(f"  FAILED {path}: {err}", err=True)
+
+
 @main.command()
 def serve() -> None:
     """Start the MCP server (stdio). Equivalent to `research-kb-mcp`."""
