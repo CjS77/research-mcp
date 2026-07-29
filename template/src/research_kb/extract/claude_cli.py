@@ -48,6 +48,42 @@ def claude_available(settings: Settings | None = None) -> bool:
     return shutil.which(settings.claude_bin) is not None
 
 
+def build_prompt_command(prompt: str, settings: Settings) -> list[str]:
+    """The ``claude -p`` argv for a plain text prompt (no file tools, subscription auth).
+
+    Used for text-generation tasks (e.g. drafting a domain profile) that need no document access —
+    so, unlike :func:`build_command`, it grants no tools and no working directory, which also means
+    it needs no permission mode: with nothing to approve there is nothing to bypass.
+    """
+    return [
+        settings.claude_bin,
+        "-p", prompt,
+        "--model", settings.claude_model,
+        "--effort", settings.claude_effort,
+        "--no-session-persistence",
+    ]
+
+
+def run_claude_prompt(prompt: str, settings: Settings | None = None) -> str | None:
+    """Run one headless ``claude -p`` text prompt; return stdout (stripped) or ``None``.
+
+    Any timeout / nonzero exit degrades to ``None`` so callers fall back to an offline path rather
+    than failing — the same graceful-degradation contract the extraction path follows.
+    """
+    settings = settings or get_settings()
+    if not claude_available(settings):
+        return None
+    try:
+        result = subprocess.run(
+            build_prompt_command(prompt, settings),
+            capture_output=True, text=True, timeout=settings.claude_timeout_s,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    text = result.stdout.strip()
+    return text if result.returncode == 0 and text else None
+
+
 def segment_ranges(page_count: int, seg_pages: int) -> list[tuple[int, int]]:
     """0-indexed inclusive ``(first, last)`` page ranges that tile the whole document."""
     seg_pages = max(1, seg_pages)

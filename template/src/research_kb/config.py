@@ -135,6 +135,11 @@ class Settings(BaseSettings):
         """Where incremental discovery persists each provider's last-run date (under work/)."""
         return self.distilled_dir.parent / "discovery-state.yaml"
 
+    @property
+    def profile_draft_path(self) -> Path:
+        """Where ``research-kb profile-init`` writes the editable draft profile (under work/)."""
+        return self.distilled_dir.parent / "profile-draft.md"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
